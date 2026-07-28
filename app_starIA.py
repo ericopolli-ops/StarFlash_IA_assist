@@ -543,7 +543,7 @@ with aba4:
     
     if "mensagens_chat_ia" not in st.session_state:
         st.session_state.mensagens_chat_ia = [
-            {"role": "assistant", "content": "Fala chefe! O cérebro do Gemini tá ligado. Manda sua pergunta! (Ex: cliente SOUFER pedidos com status aberto)"}
+            {"role": "assistant", "content": "Fala chefe! O cérebro do Gemini (versão 1.5) tá ligado. Manda sua pergunta! (Ex: cliente SOUFER pedidos com status aberto)"}
         ]
 
     for msg in st.session_state.mensagens_chat_ia:
@@ -574,8 +574,8 @@ with aba4:
                         Frase do usuário: "{prompt_ia}"
                         """
                         
-                        # 2. Chama a IA com a versão corrigida
-                        model = genai.GenerativeModel('gemini-1.5-flash-latest', generation_config={"response_mime_type": "application/json"})
+                        # NOME CORRIGIDO AQUI PARA A API NOVA
+                        model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
                         resposta_gemini = model.generate_content(prompt_sistema)
                         
                         # Limpa qualquer resquício de formatação do texto da IA
@@ -638,5 +638,3 @@ with aba4:
                         erro_str = f"❌ Erro ao tentar processar o raciocínio da IA: {e}"
                         st.error(erro_str)
                         st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": erro_str})
-
-# --- FIM DO CÓDIGO ---
