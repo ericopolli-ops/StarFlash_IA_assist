@@ -4,3 +4,4 @@ numpy
 plotly
 SQLAlchemy
 PyMySQL
+google-generativeai
