@@ -538,7 +538,7 @@ with aba4:
     st.markdown("A IA agora escreve as consultas de banco de dados do zero. Peça médias, rankings, maiores e menores.")
     st.markdown("💡 *Exemplos:* `Quais os 3 maiores clientes em faturamento?`, `Qual o maior pedido em aberto?`, `Me traga os itens mais vendidos e o preço médio.`")
 
-    # Tenta configurar o Gemini na hora, caso não tenha sido configurado no topo do arquivo
+    # Tenta configurar o Gemini na hora, caso não tenha sido configurado no topo
     try:
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -617,8 +617,11 @@ with aba4:
                         elif query_sql.startswith("```"):
                             query_sql = query_sql[3:-3].strip()
 
-                        # Executa a busca no E2DW baseada no SQL que a IA montou sozinha
-                        df_res_ia = pd.read_sql(query_sql, engine)
+                        # --- CORREÇÃO DO BUG DO PANDAS (Drible do sinal de %) ---
+                        query_sql_segura = query_sql.replace('%', '%%')
+
+                        # Executa a busca no E2DW baseada no SQL
+                        df_res_ia = pd.read_sql(query_sql_segura, engine)
 
                         if df_res_ia.empty:
                             resposta_ia = "🤖 A query foi executada com sucesso, mas o banco de dados retornou vazio para essa combinação exata."
