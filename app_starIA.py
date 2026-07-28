@@ -538,12 +538,20 @@ with aba4:
     st.markdown("A IA agora escreve as consultas de banco de dados do zero. Peça médias, rankings, maiores e menores.")
     st.markdown("💡 *Exemplos:* `Quais os 3 maiores clientes em faturamento?`, `Qual o maior pedido em aberto?`, `Me traga os itens mais vendidos e o preço médio.`")
 
+    # Tenta configurar o Gemini na hora, caso não tenha sido configurado no topo do arquivo
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        ia_configurada = True
+    except Exception:
+        ia_configurada = False
+
     if not ia_configurada:
         st.error("⚠️ A chave do Gemini não foi encontrada no Streamlit (Secrets). Adicione a GEMINI_API_KEY para a IA funcionar.")
     
     if "mensagens_chat_ia" not in st.session_state:
         st.session_state.mensagens_chat_ia = [
-            {"role": "assistant", "content": "Fala chefe! O motor de Text-to-SQL está ligado. Agora eu entendo rankings, médias e valores unitários. Manda a bronca!", "df": None, "sql": None}
+            {"role": "assistant", "content": "Fala chefe! O motor de Text-to-SQL está ligado com o Gemini 3. Agora eu entendo rankings, médias e valores unitários. Manda a bronca!", "df": None, "sql": None}
         ]
 
     for msg in st.session_state.mensagens_chat_ia:
@@ -592,14 +600,14 @@ with aba4:
 
                         DIRETRIZES DE QUERY:
                         1. Se pedir "maiores clientes", agrupe por Nome_Clien, some i_Vtotal, ordene desc e use LIMIT.
-                        2. Se pedir "maior pedido", ordene por i_Vtotal DESC LIMIT 1.
+                        2. Se pedir "maior pedido em aberto", filtre por Status = 'Aberto', ordene por i_Vtotal DESC LIMIT 1.
                         3. Se pedir "itens que mais vendo", agrupe por i_NomeProd, some i_Qtdade, e faça AVG(i_Preco).
                         4. Sempre use LIKE '%NOME%' para buscar textos (clientes ou produtos).
                         
                         Pergunta do usuário: "{prompt_ia}"
                         """
                         
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-3-flash-preview')
                         resposta_gemini = model.generate_content(prompt_sistema)
                         
                         # Limpa qualquer resquício de formatação do texto da IA
@@ -624,7 +632,7 @@ with aba4:
                         else:
                             # Formatação cosmética de colunas de moeda se a IA usar alias
                             for col in df_res_ia.columns:
-                                if 'total' in col.lower() or 'preco' in col.lower() or 'preço' in col.lower() or 'valor' in col.lower():
+                                if 'total' in col.lower() or 'preco' in col.lower() or 'preço' in col.lower() or 'valor' in col.lower() or 'média' in col.lower():
                                     df_res_ia[col] = df_res_ia[col].apply(lambda x: f"R$ {x:,.2f}" if isinstance(x, (int, float)) else x)
                             
                             resposta_ia = f"🤖 **Pronto!** Analisei a base e cheguei neste resultado:"
