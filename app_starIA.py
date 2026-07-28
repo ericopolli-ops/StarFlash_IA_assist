@@ -534,7 +534,7 @@ with aba3:
 # ABA 4: CHATBOT IA COM CÉREBRO GEMINI
 # ==========================================
 with aba4:
-    st.markdown("### 🧠 Assistente de Vendas com IA (Gemini)")
+    st.markdown("### 🧠 Assistente de Vendas com IA (Gemini 3 Preview)")
     st.markdown("O assistente lê o que você digita, entende o contexto comercial, extrai os filtros e busca no banco.")
     st.markdown("💡 *Exemplo:* `Preciso saber tudo que faturamos pra SOUFER mês passado na filial 1`")
 
@@ -543,7 +543,7 @@ with aba4:
     
     if "mensagens_chat_ia" not in st.session_state:
         st.session_state.mensagens_chat_ia = [
-            {"role": "assistant", "content": "Fala chefe! O cérebro do Gemini (versão 1.5) tá ligado. Manda sua pergunta! (Ex: cliente SOUFER pedidos com status aberto)"}
+            {"role": "assistant", "content": "Fala chefe! O cérebro do Gemini (versão 3 Preview) tá ligado. Manda sua pergunta! (Ex: cliente SOUFER pedidos com status aberto)"}
         ]
 
     for msg in st.session_state.mensagens_chat_ia:
@@ -574,8 +574,8 @@ with aba4:
                         Frase do usuário: "{prompt_ia}"
                         """
                         
-                        # NOME CORRIGIDO AQUI PARA A API NOVA
-                        model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
+                        # NOME CORRIGIDO AQUI PARA O MODELO DA SUA CONTA
+                        model = genai.GenerativeModel('gemini-3-flash-preview', generation_config={"response_mime_type": "application/json"})
                         resposta_gemini = model.generate_content(prompt_sistema)
                         
                         # Limpa qualquer resquício de formatação do texto da IA
