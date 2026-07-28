@@ -88,7 +88,7 @@ aba1, aba2, aba3, aba4 = st.tabs([
     "📊 Visão Geral da Carteira", 
     "🔎 Raio-X do Cliente", 
     "🏆 Performance do Vendedor",
-    "🧠 Chatbot IA (Gemini)"
+    "🧠 Chatbot IA (Analítico)"
 ])
 
 # ==========================================
@@ -531,110 +531,117 @@ with aba3:
                 st.error(f"❌ Erro ao analisar o Cockpit: {e}")
 
 # ==========================================
-# ABA 4: CHATBOT IA COM CÉREBRO GEMINI
+# ABA 4: CHATBOT IA COM CÉREBRO GEMINI TEXT-TO-SQL
 # ==========================================
 with aba4:
-    st.markdown("### 🧠 Assistente de Vendas com IA (Gemini 3 Preview)")
-    st.markdown("O assistente lê o que você digita, entende o contexto comercial, extrai os filtros e busca no banco.")
-    st.markdown("💡 *Exemplo:* `Preciso saber tudo que faturamos pra SOUFER mês passado na filial 1`")
+    st.markdown("### 🧠 Assistente Analítico (Cérebro Text-to-SQL)")
+    st.markdown("A IA agora escreve as consultas de banco de dados do zero. Peça médias, rankings, maiores e menores.")
+    st.markdown("💡 *Exemplos:* `Quais os 3 maiores clientes em faturamento?`, `Qual o maior pedido em aberto?`, `Me traga os itens mais vendidos e o preço médio.`")
 
     if not ia_configurada:
         st.error("⚠️ A chave do Gemini não foi encontrada no Streamlit (Secrets). Adicione a GEMINI_API_KEY para a IA funcionar.")
     
     if "mensagens_chat_ia" not in st.session_state:
         st.session_state.mensagens_chat_ia = [
-            {"role": "assistant", "content": "Fala chefe! O cérebro do Gemini (versão 3 Preview) tá ligado. Manda sua pergunta! (Ex: cliente SOUFER pedidos com status aberto)"}
+            {"role": "assistant", "content": "Fala chefe! O motor de Text-to-SQL está ligado. Agora eu entendo rankings, médias e valores unitários. Manda a bronca!", "df": None, "sql": None}
         ]
 
     for msg in st.session_state.mensagens_chat_ia:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            if msg.get("df") is not None:
+                st.dataframe(pd.DataFrame(msg["df"]), use_container_width=True, hide_index=True)
+            if msg.get("sql"):
+                with st.expander("Ver o código SQL gerado pela IA"):
+                    st.code(msg["sql"], language="sql")
 
-    if prompt_ia := st.chat_input("Ex: pedidos faturados da SOUFER...", key="chat_input_ia"):
+    if prompt_ia := st.chat_input("Ex: traga a lista dos 3 maiores clientes...", key="chat_input_ia"):
         st.session_state.mensagens_chat_ia.append({"role": "user", "content": prompt_ia})
         with st.chat_message("user"):
             st.markdown(prompt_ia)
 
         if ia_configurada:
             with st.chat_message("assistant"):
-                with st.spinner("🧠 O Gemini está pensando e processando sua frase..."):
+                with st.spinner("🧠 O Gemini está desenhando a query SQL para sua pergunta..."):
                     try:
-                        # 1. Instruções estritas para o Gemini
-                        prompt_sistema = f"""
-                        Você é um assistente de extração de filtros para SQL. 
-                        Leia a frase do usuário e retorne APENAS um JSON válido.
-                        Sem crases markdown, sem texto extra, APENAS o JSON puro.
-
-                        Regras dos campos:
-                        - "cliente": nome da empresa. Converta para MAIÚSCULO. Se não achar, null.
-                        - "status": 'Aberto', 'Fat_OK', ou 'Cancelado'. Se falar "faturado", é 'Fat_OK'. Se não achar, null.
-                        - "filial": string de 4 dígitos (ex: "0001", "0002"). Se não achar, null.
-                        - "mes_ano": string no formato "YYYYMM". Se falar "julho de 2026", "202607". Se não tiver, null.
+                        perfil_usuario = st.session_state.perfil
+                        nome_usuario = st.session_state.vendedor_nome
                         
-                        Frase do usuário: "{prompt_ia}"
+                        prompt_sistema = f"""
+                        Você é um Analista de Dados Sênior especialista em MySQL.
+                        Sua missão é transformar a pergunta do usuário em uma única query SQL.
+                        NÃO retorne NENHUM texto além da query SQL. Sem formatação markdown, sem crases, sem explicações.
+
+                        Tabela principal: PEDIDODEVENDA
+                        Colunas:
+                        - PedVenda (VARCHAR): Número do Pedido
+                        - Data_Ped (VARCHAR): Data de Emissão (formato YYYYMMDD)
+                        - Dt_Fatura (VARCHAR): Data de Faturamento (formato YYYYMMDD)
+                        - Status (VARCHAR): Valores comuns ('Aberto', 'Fat_OK', 'Cancelado')
+                        - Nome_Clien (VARCHAR): Nome do Cliente
+                        - Filial (VARCHAR): Ex: '0001', '0002'
+                        - i_NomeProd (VARCHAR): Nome ou descrição do Produto
+                        - i_Preco (FLOAT): Preço Unitário do item
+                        - i_Qtdade (FLOAT): Quantidade vendida do item
+                        - i_Vtotal (FLOAT): Valor Total do item na linha
+                        - Vendedor (VARCHAR): Nome do vendedor
+
+                        REGRA DE SEGURANÇA OBRIGATÓRIA:
+                        O usuário logado tem o perfil: {perfil_usuario} e nome: {nome_usuario}.
+                        Se o perfil for 'VENDEDOR', você DEVE OBRIGATORIAMENTE adicionar a condição " Vendedor LIKE '%{nome_usuario}%' " na cláusula WHERE em todas as suas consultas.
+
+                        DIRETRIZES DE QUERY:
+                        1. Se pedir "maiores clientes", agrupe por Nome_Clien, some i_Vtotal, ordene desc e use LIMIT.
+                        2. Se pedir "maior pedido", ordene por i_Vtotal DESC LIMIT 1.
+                        3. Se pedir "itens que mais vendo", agrupe por i_NomeProd, some i_Qtdade, e faça AVG(i_Preco).
+                        4. Sempre use LIKE '%NOME%' para buscar textos (clientes ou produtos).
+                        
+                        Pergunta do usuário: "{prompt_ia}"
                         """
                         
-                        # NOME CORRIGIDO AQUI PARA O MODELO DA SUA CONTA
-                        model = genai.GenerativeModel('gemini-3-flash-preview', generation_config={"response_mime_type": "application/json"})
+                        model = genai.GenerativeModel('gemini-1.5-flash')
                         resposta_gemini = model.generate_content(prompt_sistema)
                         
                         # Limpa qualquer resquício de formatação do texto da IA
-                        texto_ia = resposta_gemini.text.strip()
-                        if texto_ia.startswith("```json"):
-                            texto_ia = texto_ia[7:-3].strip()
-                        elif texto_ia.startswith("```"):
-                            texto_ia = texto_ia[3:-3].strip()
+                        query_sql = resposta_gemini.text.strip()
+                        if query_sql.startswith("```sql"):
+                            query_sql = query_sql[6:-3].strip()
+                        elif query_sql.startswith("```"):
+                            query_sql = query_sql[3:-3].strip()
 
-                        # 3. Transforma a resposta em dicionário Python
-                        filtros = json.loads(texto_ia)
-                        
-                        # 4. Monta a Query SQL real
-                        query_assistente = "SELECT PedVenda, Status, Nome_Clien, Cidade, Dt_Fatura, Data_Ped, i_Vtotal, i_NomeProd, TRANSPORTA, Filial FROM PEDIDODEVENDA WHERE 1=1"
-                        params_assistente = {}
-
-                        if st.session_state.perfil == "VENDEDOR":
-                            query_assistente += " AND Vendedor LIKE %(v_log)s"
-                            params_assistente["v_log"] = f"%{st.session_state.vendedor_nome}%"
-
-                        if filtros.get("cliente"):
-                            query_assistente += " AND Nome_Clien LIKE %(cli_busca)s"
-                            params_assistente["cli_busca"] = f"%{filtros['cliente']}%"
-
-                        if filtros.get("status"):
-                            query_assistente += " AND Status = %(stat_busca)s"
-                            params_assistente["stat_busca"] = filtros["status"]
-
-                        if filtros.get("filial"):
-                            query_assistente += " AND Filial = %(fil_busca)s"
-                            params_assistente["fil_busca"] = filtros["filial"]
-                            
-                        if filtros.get("mes_ano"):
-                            query_assistente += " AND (Dt_Fatura LIKE %(comp)s OR Data_Ped LIKE %(comp)s)"
-                            params_assistente["comp"] = f"{filtros['mes_ano']}%"
-
-                        query_assistente += " LIMIT 250;"
-                        
-                        # Executa a busca no E2DW
-                        df_res_ia = pd.read_sql(query_assistente, engine, params=params_assistente)
+                        # Executa a busca no E2DW baseada no SQL que a IA montou sozinha
+                        df_res_ia = pd.read_sql(query_sql, engine)
 
                         if df_res_ia.empty:
-                            resposta_ia = f"🤖 **Análise da IA:** Entendi que você quer buscar `Cliente: {filtros.get('cliente')}`, `Status: {filtros.get('status')}`. Mas não encontrei nada no banco de dados com essa exata combinação."
+                            resposta_ia = "🤖 A query foi executada com sucesso, mas o banco de dados retornou vazio para essa combinação exata."
                             st.markdown(resposta_ia)
-                        else:
-                            total_valor = df_res_ia['i_Vtotal'].sum()
-                            total_pedidos = df_res_ia['PedVenda'].nunique()
+                            with st.expander("Ver o código SQL gerado pela IA"):
+                                st.code(query_sql, language="sql")
                             
-                            resposta_ia = f"🤖 **Pronto!** Encontrei **{total_pedidos} pedido(s)** com base nos parâmetros que extraí da sua frase: *(Cliente: {filtros.get('cliente')}, Status: {filtros.get('status')}, Filial: {filtros.get('filial')})*. Total: **R$ {total_valor:,.2f}**."
+                            st.session_state.mensagens_chat_ia.append({
+                                "role": "assistant", "content": resposta_ia, "df": None, "sql": query_sql
+                            })
+                        else:
+                            # Formatação cosmética de colunas de moeda se a IA usar alias
+                            for col in df_res_ia.columns:
+                                if 'total' in col.lower() or 'preco' in col.lower() or 'preço' in col.lower() or 'valor' in col.lower():
+                                    df_res_ia[col] = df_res_ia[col].apply(lambda x: f"R$ {x:,.2f}" if isinstance(x, (int, float)) else x)
+                            
+                            resposta_ia = f"🤖 **Pronto!** Analisei a base e cheguei neste resultado:"
                             st.markdown(resposta_ia)
+                            st.dataframe(df_res_ia, use_container_width=True, hide_index=True)
+                            
+                            with st.expander("Ver o código SQL gerado pela IA"):
+                                st.code(query_sql, language="sql")
 
-                            df_show_ia = df_res_ia[['PedVenda', 'Filial', 'Status', 'Nome_Clien', 'Data_Ped', 'Dt_Fatura', 'i_Vtotal']].drop_duplicates()
-                            df_show_ia.rename(columns={'PedVenda': 'Nº Pedido', 'Filial': 'Filial', 'Status': 'Status', 'Nome_Clien': 'Cliente', 'Data_Ped': 'Emissão', 'Dt_Fatura': 'Faturamento', 'i_Vtotal': 'Valor Total'}, inplace=True)
-                            df_show_ia['Valor Total'] = df_show_ia['Valor Total'].apply(lambda x: f"R$ {x:,.2f}")
-                            st.dataframe(df_show_ia, use_container_width=True, hide_index=True)
-
-                        st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": resposta_ia})
+                            df_dict = df_res_ia.to_dict('records')
+                            st.session_state.mensagens_chat_ia.append({
+                                "role": "assistant", "content": resposta_ia, "df": df_dict, "sql": query_sql
+                            })
 
                     except Exception as e:
-                        erro_str = f"❌ Erro ao tentar processar o raciocínio da IA: {e}"
+                        erro_str = f"❌ Erro ao executar a query da IA: {e}"
                         st.error(erro_str)
-                        st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": erro_str})
+                        st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": erro_str, "df": None, "sql": None})
+
+# --- FIM DO CÓDIGO ---
