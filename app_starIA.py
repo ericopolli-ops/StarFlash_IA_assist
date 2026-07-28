@@ -2,10 +2,12 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
+import json
 import plotly.express as px
 from sqlalchemy import create_engine
 from urllib.parse import quote_plus
 from datetime import datetime
+import google.generativeai as genai
 
 # Configuração da tela
 st.set_page_config(page_title="Painel Comercial - Star Flash IA", page_icon="📈", layout="wide")
@@ -18,10 +20,17 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Configuração da IA (Gemini)
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    ia_configurada = True
+except Exception:
+    ia_configurada = False
+
 @st.cache_resource
 def get_engine():
     usuario_mysql = "65895484000120_ro"
-    senha_mysql = quote_plus("79nP8@5E%NP&")
+    senha_mysql = quote_plus(st.secrets["DB_SENHA"])
     host_mysql = "e2dw.aokiinova.com.br"
     banco_mysql = "65895484000120"
     uri = f"mysql+pymysql://{usuario_mysql}:{senha_mysql}@{host_mysql}:3306/{banco_mysql}"
@@ -36,8 +45,8 @@ if "autenticado" not in st.session_state:
     st.session_state.vendedor_nome = None
 
 if not st.session_state.autenticado:
-    st.title("🔒 Acesso Restrito - Painel Comercial Star Flash (IA)")
-    st.markdown("Entre com suas credenciais para acessar o ambiente de testes do Assistente.")
+    st.title("🔒 Acesso Restrito - Star Flash (Cérebro Gemini)")
+    st.markdown("Entre com suas credenciais para acessar o ambiente com Inteligência Artificial real.")
     
     with st.form("form_login"):
         usuario_input = st.text_input("Usuário (Nome do Vendedor ou MASTER):").strip()
@@ -70,16 +79,16 @@ if st.sidebar.button("🚪 Sair / Trocar Usuário"):
     st.session_state.vendedor_nome = None
     st.rerun()
 
-st.title("📊 Painel de Desempenho Comercial - Star Flash (Com IA)")
+st.title("📊 Painel de Desempenho Comercial - Star Flash (Com Gemini IA)")
 
 # ==========================================
-# ESTRUTURA DE 4 ABAS (3 CLÁSSICAS + 1 IA)
+# ESTRUTURA DE ABAS
 # ==========================================
 aba1, aba2, aba3, aba4 = st.tabs([
     "📊 Visão Geral da Carteira", 
     "🔎 Raio-X do Cliente", 
     "🏆 Performance do Vendedor",
-    "🤖 Assistente Comercial IA"
+    "🧠 Chatbot IA (Gemini)"
 ])
 
 # ==========================================
@@ -189,7 +198,6 @@ with aba1:
         if escolha:
             pedido_sel = escolha.split(" - ")[0]
             st.dataframe(df[df['Nº Pedido'] == pedido_sel][['Cód. Produto', 'Descrição o Item', 'Qtd', 'Unidade', 'Preço Unit.', 'Total Item', 'Data Entrega', 'Nota Fiscal']], use_container_width=True, hide_index=True)
-
 
 # ==========================================
 # ABA 2: RAIO-X DO CLIENTE 
@@ -342,13 +350,12 @@ with aba2:
                     st.error(f"❌ Erro ao processar: {e}")
 
     # ==========================================
-    # INTERAÇÕES PÓS-BOTÃO (GRÁFICOS, PREÇOS E ÚLTIMOS PEDIDOS)
+    # INTERAÇÕES PÓS-BOTÃO (GRÁFICOS E PEDIDOS)
     # ==========================================
     if "df_rx_volume" in st.session_state and "df_rx_recentes" in st.session_state:
         df_rx = st.session_state.df_rx_volume
         df_rec = st.session_state.df_rx_recentes
         
-        # 1. Gráfico de Volume
         st.markdown("#### 📦 Análise de Volume Físico (Qtd Vendida)")
         col_v1, col_v2 = st.columns(2)
         lista_produtos = df_rx['i_NomeProd'].unique()
@@ -368,7 +375,6 @@ with aba2:
 
         st.markdown("---")
         
-        # 2. Histórico de Preços
         st.markdown("#### 💲 Histórico Detalhado de Preços (12 Meses)")
         df_rx_12m = df_rx[df_rx['Data_Fatura_Real'] >= (pd.to_datetime('today') - pd.DateOffset(years=1))]
         if not df_rx_12m.empty:
@@ -383,10 +389,7 @@ with aba2:
 
         st.markdown("---")
 
-        # 3. NOVO: Histórico e Rastreabilidade de Pedidos COM FILTROS E INTELIGÊNCIA
         st.markdown("#### 🛒 Rastreabilidade: Pedidos dos Últimos 6 Meses")
-        st.write("Visão consolidada de orçamentos, cancelamentos e faturamentos recentes.")
-
         if not df_rec.empty:
             df_rec['Emissão'] = pd.to_datetime(df_rec['Data_Ped'], format='%Y%m%d', errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
             df_rec['Faturamento'] = pd.to_datetime(df_rec['Dt_Fatura'], format='%Y%m%d', errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
@@ -395,7 +398,6 @@ with aba2:
             df_resumo_ped = df_rec.groupby(['Filial', 'Status', 'PedVenda', 'Emissão', 'Faturamento', 'condPagto', 'FRETE', 'TRANSPORTA', 'REDESPACHO', 'i_notas'], as_index=False)['i_Vtotal'].sum()
             df_resumo_ped.rename(columns={'PedVenda': 'Nº Pedido', 'condPagto': 'Pagamento', 'FRETE': 'Frete', 'TRANSPORTA': 'Transportadora', 'REDESPACHO': 'Redespacho', 'i_notas': 'Nota Fiscal', 'i_Vtotal': 'Valor Total'}, inplace=True)
             
-            # --- FILTROS INTELIGENTES DA RASTREABILIDADE ---
             st.markdown("##### 🔍 Filtrar Histórico Recente")
             cf1, cf2, cf3 = st.columns(3)
             
@@ -413,27 +415,21 @@ with aba2:
             if usar_dt_fatura:
                 dt_fat = cf3.date_input("Período de Faturamento (Início e Fim):", [], key="dt_fat_val")
 
-            # Aplicação dos Filtros
             df_filtrado = df_resumo_ped.copy()
             
             if f_status != "TODOS":
                 df_filtrado = df_filtrado[df_filtrado['Status'] == f_status]
-                
             if usar_dt_emissao and len(dt_emi) == 2:
                 df_filtrado = df_filtrado[(df_filtrado['Emissao_DT'].dt.date >= dt_emi[0]) & (df_filtrado['Emissao_DT'].dt.date <= dt_emi[1])]
-                
             if usar_dt_fatura and len(dt_fat) == 2:
                 df_filtrado = df_filtrado[df_filtrado['Fatura_DT'].notna()]
                 df_filtrado = df_filtrado[(df_filtrado['Fatura_DT'].dt.date >= dt_fat[0]) & (df_filtrado['Fatura_DT'].dt.date <= dt_fat[1])]
 
-            # Exibição da Tabela Filtrada
             df_exibicao = df_filtrado.drop(columns=['Emissao_DT', 'Fatura_DT']).copy()
             df_exibicao['Valor Total'] = df_exibicao['Valor Total'].apply(lambda x: f"R$ {x:,.2f}")
             st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
 
-            # --- DETALHAMENTO DO PEDIDO COM CAIXA DE SELEÇÃO OTIMIZADA ---
             st.markdown("##### 🔎 Detalhar Pedido")
-            
             df_filtrado['Opcao_Pedido'] = df_filtrado['Nº Pedido'] + " - " + df_filtrado['Status'] + " - Emissão: " + df_filtrado['Emissão']
             lista_pedidos_recentes = df_filtrado.sort_values('Emissao_DT', ascending=False)['Opcao_Pedido'].tolist()
             
@@ -441,7 +437,6 @@ with aba2:
             
             if pedido_sel_rx:
                 num_pedido_exato = pedido_sel_rx.split(" - ")[0]
-                
                 dados_ped = df_resumo_ped[df_resumo_ped['Nº Pedido'] == num_pedido_exato].iloc[0]
                 itens_ped = df_rec[df_rec['PedVenda'] == num_pedido_exato]
 
@@ -457,29 +452,22 @@ with aba2:
                 
                 itens_ped_show['Preço Unit.'] = itens_ped_show['Preço Unit.'].apply(lambda x: f"R$ {x:,.2f}")
                 itens_ped_show['Total Item'] = itens_ped_show['Total Item'].apply(lambda x: f"R$ {x:,.2f}")
-                
                 st.dataframe(itens_ped_show, use_container_width=True, hide_index=True)
         else:
             st.warning("Nenhum pedido registrado nos últimos 6 meses para este cliente.")
-
 
 # ==========================================
 # ABA 3: PERFORMANCE DO VENDEDOR 
 # ==========================================
 with aba3:
     st.markdown("### 🏆 Cockpit de Gestão Comercial e Riscos")
-    
     filiais_opcoes = ["TODAS", "0001", "0002", "0003", "0004", "0005", "0006"]
     filial_cockpit = st.selectbox("🎯 Filtro Principal de Visão:", filiais_opcoes, key="filial_cockpit_sel")
     
     if st.button("📊 Atualizar Cockpit Geral", type="primary", use_container_width=True, key="btn_cockpit"):
-        with st.spinner("Mapeando carteira, finanças e prioridades..."):
+        with st.spinner("Mapeando carteira..."):
             try:
-                query_perf = """
-                    SELECT Nome_Clien, Filial, i_Vtotal, Dt_Fatura, condPagto 
-                    FROM PEDIDODEVENDA 
-                    WHERE Status = 'Fat_OK'
-                """
+                query_perf = "SELECT Nome_Clien, Filial, i_Vtotal, Dt_Fatura, condPagto FROM PEDIDODEVENDA WHERE Status = 'Fat_OK'"
                 params_perf = {}
                 if st.session_state.perfil == "VENDEDOR":
                     query_perf += " AND Vendedor LIKE %(vend)s"
@@ -502,13 +490,11 @@ with aba3:
                         elif "DEPOSITO" in texto or "DEPÓSITO" in texto: metodo = "DEPÓSITO"
                         elif "VISTA" in texto: metodo = "À VISTA"
                         else: metodo = "OUTROS"
-                        
                         numeros = re.findall(r'\d+', texto)
                         media_dias = sum(int(n) for n in numeros) / len(numeros) if numeros else 0.0
                         return metodo, media_dias
 
                     df_perf[['Metodo_Pagto', 'Prazo_Medio_Dias']] = df_perf['condPagto'].apply(lambda x: pd.Series(processar_pagamento(x)))
-
                     df_filt = df_perf if filial_cockpit == "TODAS" else df_perf[df_perf['Filial'] == filial_cockpit]
                     
                     if df_filt.empty:
@@ -519,12 +505,9 @@ with aba3:
                         df_abc['Perc_Acumulado'] = df_abc['Perc'].cumsum()
                         df_abc['Classe'] = np.where(df_abc['Perc_Acumulado'] <= 0.8, 'A', np.where(df_abc['Perc_Acumulado'] <= 0.95, 'B', 'C'))
                         
-                        st.markdown("#### 🎯 Distribuição da Carteira")
                         col_r1, col_r2 = st.columns(2)
-                        
                         df_abc_count = df_abc.groupby('Classe').size().reset_index(name='Qtd')
-                        fig_abc = px.pie(df_abc_count, values='Qtd', names='Classe', hole=0.5, title='Qtd Clientes Curva ABC', color='Classe',
-                                         color_discrete_map={'A':'#10b981', 'B':'#f59e0b', 'C':'#64748b'})
+                        fig_abc = px.pie(df_abc_count, values='Qtd', names='Classe', hole=0.5, title='Qtd Clientes Curva ABC', color='Classe', color_discrete_map={'A':'#10b981', 'B':'#f59e0b', 'C':'#64748b'})
                         col_r1.plotly_chart(fig_abc, use_container_width=True)
                         
                         df_filial_fat = df_filt.groupby('Filial')['i_Vtotal'].sum().reset_index()
@@ -532,11 +515,9 @@ with aba3:
                         col_r2.plotly_chart(fig_fil, use_container_width=True)
 
                         st.markdown("---")
-
                         st.markdown("#### 💰 Termômetro Financeiro (Global 6 Filiais)")
                         filiais_fixas = ['0001', '0002', '0003', '0004', '0005', '0006']
                         cols_prazo = st.columns(6)
-                        
                         for i, f in enumerate(filiais_fixas):
                             df_f = df_perf[df_perf['Filial'] == f]
                             prazo = df_f['Prazo_Medio_Dias'].mean() if not df_f.empty else 0
@@ -545,183 +526,115 @@ with aba3:
                         df_metodos = df_filt.groupby('Metodo_Pagto')['i_Vtotal'].sum().reset_index()
                         df_metodos['%'] = (df_metodos['i_Vtotal'] / df_metodos['i_Vtotal'].sum()) * 100
                         texto_metodos = " | ".join([f"**{row['Metodo_Pagto']}**: {row['%']:.1f}%" for _, row in df_metodos.iterrows()])
-                        st.info(f"**Uso de Meios de Pagamento (Receita):** {texto_metodos}")
-
-                        st.markdown("---")
-
-                        col_rt1, col_rt2 = st.columns([2, 1])
-                        
-                        with col_rt1:
-                            st.markdown("#### 📈 Evolução de Receita (Empilhado por Filial)")
-                            data_12m = hoje - pd.DateOffset(months=12)
-                            df_12m = df_filt[df_filt['Data'] >= data_12m]
-                            df_ritmo = df_12m.groupby(['Mes_Ano', 'Filial'])['i_Vtotal'].sum().reset_index().sort_values('Mes_Ano')
-                            fig_ritmo = px.bar(df_ritmo, x='Mes_Ano', y='i_Vtotal', color='Filial', title="Vendas 12 Meses")
-                            st.plotly_chart(fig_ritmo, use_container_width=True)
-                            
-                        with col_rt2:
-                            st.markdown("#### 🏆 TOP 10 Clientes (12M)")
-                            df_top10 = df_12m.groupby('Nome_Clien')['i_Vtotal'].sum().reset_index().sort_values('i_Vtotal', ascending=False).head(10)
-                            df_top10['i_Vtotal'] = df_top10['i_Vtotal'].apply(lambda x: f"R$ {x:,.2f}")
-                            df_top10.index = np.arange(1, len(df_top10) + 1)
-                            df_top10.rename(columns={'Nome_Clien': 'Cliente', 'i_Vtotal': 'Faturamento'}, inplace=True)
-                            st.dataframe(df_top10, use_container_width=True)
-
-                        st.markdown("---")
-
-                        st.markdown("#### 🚨 Listas de Ação (Priorizadas por Receita)")
-                        
-                        alertas_risco = []
-                        alertas_inativos = []
-                        
-                        for cliente in df_filt['Nome_Clien'].unique():
-                            df_cli = df_filt[df_filt['Nome_Clien'] == cliente]
-                            datas = df_cli['Data'].dt.date.drop_duplicates().sort_values()
-                            total_hist = df_cli['i_Vtotal'].sum()
-                            classe_cli = df_abc[df_abc['Nome_Clien'] == cliente]['Classe'].values[0]
-                            
-                            if len(datas) > 0:
-                                ultima = datas.iloc[-1]
-                                dias_sem = (hoje.date() - ultima).days
-                                
-                                if dias_sem > 180:
-                                    alertas_inativos.append({"Classe": classe_cli, "Cliente": cliente, "Dias Inativo": dias_sem, "Valor Histórico": total_hist})
-                                elif len(datas) > 1:
-                                    ciclo = pd.Series(datas).diff().dt.days.mean()
-                                    if dias_sem > (ciclo * 1.5):
-                                        alertas_risco.append({"Classe": classe_cli, "Cliente": cliente, "Status": "🔴 Crítico", "Atraso (Dias)": dias_sem, "Histórico": total_hist})
-                                    elif dias_sem > ciclo:
-                                        alertas_risco.append({"Classe": classe_cli, "Cliente": cliente, "Status": "🟡 Atenção", "Atraso (Dias)": dias_sem, "Histórico": total_hist})
-
-                        tab_urg, tab_res = st.tabs(["🔥 Ligar Urgente (Atrasados)", "🛟 Campanha de Resgate (> 6 Meses)"])
-                        
-                        with tab_urg:
-                            if alertas_risco:
-                                df_urg = pd.DataFrame(alertas_risco).sort_values(by="Histórico", ascending=False)
-                                df_urg['Histórico'] = df_urg['Histórico'].apply(lambda x: f"R$ {x:,.2f}")
-                                st.dataframe(df_urg, use_container_width=True, hide_index=True)
-                            else: st.success("Nenhum cliente ativo atrasado.")
-
-                        with tab_res:
-                            if alertas_inativos:
-                                df_res_tbl = pd.DataFrame(alertas_inativos).sort_values(by="Valor Histórico", ascending=False)
-                                df_res_tbl['Valor Histórico'] = df_res_tbl['Valor Histórico'].apply(lambda x: f"R$ {x:,.2f}")
-                                st.dataframe(df_res_tbl, use_container_width=True, hide_index=True)
-                            else: st.info("Nenhum cliente inativo na seleção.")
-
+                        st.info(f"**Uso de Meios de Pagamento:** {texto_metodos}")
             except Exception as e:
                 st.error(f"❌ Erro ao analisar o Cockpit: {e}")
 
-
 # ==========================================
-# ABA 4: ASSISTENTE COMERCIAL IA (DINÂMICO)
+# ABA 4: CHATBOT IA COM CÉREBRO GEMINI
 # ==========================================
 with aba4:
-    st.markdown("### 🤖 Assistente Comercial Inteligente (IA Dinâmica)")
-    st.markdown("Converse com os dados da Star Flash. O assistente captura qualquer nome de cliente, filial e data direto da sua frase.")
-    st.markdown("💡 *Exemplos de comandos:* `cliente agrobiologica faturados`, `pedidos abertos filial 0001`, `faturamento julho de 2026`")
+    st.markdown("### 🧠 Assistente de Vendas com IA (Gemini)")
+    st.markdown("O assistente lê o que você digita, entende o contexto comercial, extrai os filtros e busca no banco.")
+    st.markdown("💡 *Exemplo:* `Preciso saber tudo que faturamos pra SOUFER mês passado na filial 1`")
 
+    if not ia_configurada:
+        st.error("⚠️ A chave do Gemini não foi encontrada no Streamlit (Secrets). Adicione a GEMINI_API_KEY para a IA funcionar.")
+    
     if "mensagens_chat_ia" not in st.session_state:
         st.session_state.mensagens_chat_ia = [
-            {"role": "assistant", "content": "Fala chefe! O extrator dinâmico está pronto. Digite o nome do cliente (ex: AGROBIOLOGICA) e os pedidos para testarmos!"}
+            {"role": "assistant", "content": "Fala chefe! O cérebro do Gemini tá ligado. Manda sua pergunta! (Ex: cliente SOUFER pedidos com status aberto)"}
         ]
 
     for msg in st.session_state.mensagens_chat_ia:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt_ia := st.chat_input("Digite o comando (ex: cliente agrobiologica faturados)...", key="chat_input_ia"):
+    if prompt_ia := st.chat_input("Ex: pedidos faturados da SOUFER...", key="chat_input_ia"):
         st.session_state.mensagens_chat_ia.append({"role": "user", "content": prompt_ia})
         with st.chat_message("user"):
             st.markdown(prompt_ia)
 
-        with st.chat_message("assistant"):
-            with st.spinner("Varrendo o E2DW com extração dinâmica..."):
-                try:
-                    texto_lower = prompt_ia.lower()
-                    
-                    query_assistente = "SELECT PedVenda, Status, Nome_Clien, Cidade, Dt_Fatura, Data_Ped, i_Vtotal, i_NomeProd, TRANSPORTA, Filial FROM PEDIDODEVENDA WHERE 1=1"
-                    params_assistente = {}
+        if ia_configurada:
+            with st.chat_message("assistant"):
+                with st.spinner("🧠 O Gemini está pensando e processando sua frase..."):
+                    try:
+                        # 1. Instruções estritas para o Gemini
+                        prompt_sistema = f"""
+                        Você é um assistente de extração de filtros para SQL. 
+                        Leia a frase do usuário e retorne APENAS um JSON válido.
+                        Sem crases markdown, sem texto extra, APENAS o JSON puro.
 
-                    # 1. Segurança por Perfil
-                    if st.session_state.perfil == "VENDEDOR":
-                        query_assistente += " AND Vendedor LIKE %(v_log)s"
-                        params_assistente["v_log"] = f"%{st.session_state.vendedor_nome}%"
-
-                    # 2. Inteligência Dinâmica de Cliente
-                    match_cliente = re.search(r'(?:cliente|para|da|do)\s+([a-zA-ZÀ-ÿ0-9\s]+?)(?:\s+(?:faturado|aberto|filial|em|no|na|junho|julho|agosto|setembro|outubro|novembro|dezembro|janeiro|fevereiro|março|abril|maio|202|pedidos)|$)', texto_lower)
-                    
-                    cliente_busca = None
-                    if match_cliente:
-                        cliente_busca = match_cliente.group(1).strip()
-                    else:
-                        palavras_ignoradas = ["pedidos", "faturados", "abertos", "preciso", "dos", "do", "da", "de", "o", "a", "para", "com", "no", "na", "mes", "mês", "cliente", "este", "apenas"]
-                        tokens = [p for p in texto_lower.split() if p not in palavras_ignoradas and not p.startswith("202") and not p.isdigit()]
-                        if tokens:
-                            cliente_busca = tokens[0]
-
-                    if cliente_busca and len(cliente_busca) > 2:
-                        query_assistente += " AND Nome_Clien LIKE %(cli_busca)s"
-                        params_assistente["cli_busca"] = f"%{cliente_busca.upper()}%"
-
-                    # 3. Inteligência de Filial
-                    match_filial = re.search(r'filial\s*0*([1-6])', texto_lower)
-                    if match_filial:
-                        num_filial = match_filial.group(1).zfill(4)
-                        query_assistente += " AND Filial = %(filial_busca)s"
-                        params_assistente["filial_busca"] = num_filial
-
-                    # 4. Inteligência de Status
-                    if "aberto" in texto_lower:
-                        query_assistente += " AND Status = 'Aberto'"
-                    elif "faturado" in texto_lower or "fat_ok" in texto_lower:
-                        query_assistente += " AND Status = 'Fat_OK'"
-
-                    # 5. Inteligência de Mês e Ano
-                    meses_map = {
-                        "janeiro": "01", "fevereiro": "02", "março": "03", "marco": "03",
-                        "abril": "04", "maio": "05", "junho": "06", "julho": "07",
-                        "agosto": "08", "setembro": "09", "outubro": "10", "novembro": "11", "dezembro": "12"
-                    }
-                    
-                    ano_match = re.search(r'202[6-9]', texto_lower)
-                    ano_encontrado = ano_match.group(0) if ano_match else "2026"
-
-                    mes_encontrado = None
-                    for nome_mes, num_mes in meses_map.items():
-                        if nome_mes in texto_lower:
-                            mes_encontrado = num_mes
-                            break
-
-                    if mes_encontrado:
-                        competencia = f"{ano_encontrado}{mes_encontrado}"
-                        query_assistente += " AND (Dt_Fatura LIKE %(comp)s OR Data_Ped LIKE %(comp)s)"
-                        params_assistente["comp"] = f"{competencia}%"
-
-                    query_assistente += " LIMIT 250;"
-                    df_res_ia = pd.read_sql(query_assistente, engine, params=params_assistente)
-
-                    if df_res_ia.empty:
-                        resposta_ia = f"Não encontrei registros para o termo **'{cliente_busca.upper() if cliente_busca else 'informado'}'** com esses filtros."
-                        st.markdown(resposta_ia)
-                    else:
-                        total_valor = df_res_ia['i_Vtotal'].sum()
-                        total_pedidos = df_res_ia['PedVenda'].nunique()
+                        Regras dos campos:
+                        - "cliente": nome da empresa. Converta para MAIÚSCULO. Se não achar, null.
+                        - "status": 'Aberto', 'Fat_OK', ou 'Cancelado'. Se falar "faturado", é 'Fat_OK'. Se não achar, null.
+                        - "filial": string de 4 dígitos (ex: "0001", "0002"). Se não achar, null.
+                        - "mes_ano": string no formato "YYYYMM". Se falar "julho de 2026", "202607". Se não tiver, null.
                         
-                        cli_info = f" do cliente **{cliente_busca.upper()}**" if cliente_busca else ""
-                        filial_info = f" (Filial {num_filial})" if match_filial else ""
+                        Frase do usuário: "{prompt_ia}"
+                        """
                         
-                        resposta_ia = f"Encontrei **{total_pedidos} pedido(s)**{cli_info}{filial_info}, totalizando **R$ {total_valor:,.2f}**."
-                        st.markdown(resposta_ia)
+                        # 2. Chama a IA
+                        model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
+                        resposta_gemini = model.generate_content(prompt_sistema)
+                        
+                        # Limpa qualquer resquício de formatação do texto da IA
+                        texto_ia = resposta_gemini.text.strip()
+                        if texto_ia.startswith("```json"):
+                            texto_ia = texto_ia[7:-3].strip()
+                        elif texto_ia.startswith("```"):
+                            texto_ia = texto_ia[3:-3].strip()
 
-                        df_show_ia = df_res_ia[['PedVenda', 'Filial', 'Status', 'Nome_Clien', 'Data_Ped', 'Dt_Fatura', 'i_Vtotal']].drop_duplicates()
-                        df_show_ia.rename(columns={'PedVenda': 'Nº Pedido', 'Filial': 'Filial', 'Status': 'Status', 'Nome_Clien': 'Cliente', 'Data_Ped': 'Emissão', 'Dt_Fatura': 'Faturamento', 'i_Vtotal': 'Valor Total'}, inplace=True)
-                        df_show_ia['Valor Total'] = df_show_ia['Valor Total'].apply(lambda x: f"R$ {x:,.2f}")
-                        st.dataframe(df_show_ia, use_container_width=True, hide_index=True)
+                        # 3. Transforma a resposta em dicionário Python
+                        filtros = json.loads(texto_ia)
+                        
+                        # 4. Monta a Query SQL real
+                        query_assistente = "SELECT PedVenda, Status, Nome_Clien, Cidade, Dt_Fatura, Data_Ped, i_Vtotal, i_NomeProd, TRANSPORTA, Filial FROM PEDIDODEVENDA WHERE 1=1"
+                        params_assistente = {}
 
-                    st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": resposta_ia})
+                        if st.session_state.perfil == "VENDEDOR":
+                            query_assistente += " AND Vendedor LIKE %(v_log)s"
+                            params_assistente["v_log"] = f"%{st.session_state.vendedor_nome}%"
 
-                except Exception as e:
-                    erro_str = f"❌ Erro ao processar: {e}"
-                    st.error(erro_str)
-                    st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": erro_str})
+                        if filtros.get("cliente"):
+                            query_assistente += " AND Nome_Clien LIKE %(cli_busca)s"
+                            params_assistente["cli_busca"] = f"%{filtros['cliente']}%"
+
+                        if filtros.get("status"):
+                            query_assistente += " AND Status = %(stat_busca)s"
+                            params_assistente["stat_busca"] = filtros["status"]
+
+                        if filtros.get("filial"):
+                            query_assistente += " AND Filial = %(fil_busca)s"
+                            params_assistente["fil_busca"] = filtros["filial"]
+                            
+                        if filtros.get("mes_ano"):
+                            query_assistente += " AND (Dt_Fatura LIKE %(comp)s OR Data_Ped LIKE %(comp)s)"
+                            params_assistente["comp"] = f"{filtros['mes_ano']}%"
+
+                        query_assistente += " LIMIT 250;"
+                        
+                        # Executa a busca no E2DW
+                        df_res_ia = pd.read_sql(query_assistente, engine, params=params_assistente)
+
+                        if df_res_ia.empty:
+                            resposta_ia = f"🤖 **Análise da IA:** Entendi que você quer buscar `Cliente: {filtros.get('cliente')}`, `Status: {filtros.get('status')}`. Mas não encontrei nada no banco de dados com essa exata combinação."
+                            st.markdown(resposta_ia)
+                        else:
+                            total_valor = df_res_ia['i_Vtotal'].sum()
+                            total_pedidos = df_res_ia['PedVenda'].nunique()
+                            
+                            resposta_ia = f"🤖 **Pronto!** Encontrei **{total_pedidos} pedido(s)** com base nos parâmetros que extraí da sua frase: *(Cliente: {filtros.get('cliente')}, Status: {filtros.get('status')}, Filial: {filtros.get('filial')})*. Total: **R$ {total_valor:,.2f}**."
+                            st.markdown(resposta_ia)
+
+                            df_show_ia = df_res_ia[['PedVenda', 'Filial', 'Status', 'Nome_Clien', 'Data_Ped', 'Dt_Fatura', 'i_Vtotal']].drop_duplicates()
+                            df_show_ia.rename(columns={'PedVenda': 'Nº Pedido', 'Filial': 'Filial', 'Status': 'Status', 'Nome_Clien': 'Cliente', 'Data_Ped': 'Emissão', 'Dt_Fatura': 'Faturamento', 'i_Vtotal': 'Valor Total'}, inplace=True)
+                            df_show_ia['Valor Total'] = df_show_ia['Valor Total'].apply(lambda x: f"R$ {x:,.2f}")
+                            st.dataframe(df_show_ia, use_container_width=True, hide_index=True)
+
+                        st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": resposta_ia})
+
+                    except Exception as e:
+                        erro_str = f"❌ Erro ao tentar processar o raciocínio da IA: {e}"
+                        st.error(erro_str)
+                        st.session_state.mensagens_chat_ia.append({"role": "assistant", "content": erro_str})
