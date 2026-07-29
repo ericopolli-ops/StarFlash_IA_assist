@@ -576,37 +576,36 @@ with aba4:
                         nome_usuario = st.session_state.vendedor_nome
                         
                         prompt_sistema = f"""
-                        Você é um Analista de Dados Sênior especialista em MySQL.
+                        Você é um Analista de Dados Sênior especialista em MySQL para ERPs.
                         Sua missão é transformar a pergunta do usuário em uma única query SQL.
                         NÃO retorne NENHUM texto além da query SQL. Sem formatação markdown, sem crases, sem explicações.
 
                         Tabela principal: PEDIDODEVENDA
-                        Colunas:
-                        - PedVenda (VARCHAR): Número do Pedido
-                        - Data_Ped (VARCHAR): Data de Emissão (formato YYYYMMDD)
-                        - Dt_Fatura (VARCHAR): Data de Faturamento (formato YYYYMMDD)
-                        - Status (VARCHAR): Valores comuns ('Aberto', 'Fat_OK', 'Cancelado')
+                        Colunas úteis:
                         - Nome_Clien (VARCHAR): Nome do Cliente
-                        - Filial (VARCHAR): Ex: '0001', '0002'
                         - i_NomeProd (VARCHAR): Nome ou descrição do Produto
                         - i_Preco (FLOAT): Preço Unitário do item
-                        - i_Qtdade (FLOAT): Quantidade vendida do item
-                        - i_Vtotal (FLOAT): Valor Total do item na linha
+                        - Dt_Fatura (VARCHAR): Data de Faturamento (formato YYYYMMDD)
+                        - Status (VARCHAR): Status do pedido ('Fat_OK' para faturados)
                         - Vendedor (VARCHAR): Nome do vendedor
 
                         REGRA DE SEGURANÇA OBRIGATÓRIA:
                         O usuário logado tem o perfil: {perfil_usuario} e nome: {nome_usuario}.
                         Se o perfil for 'VENDEDOR', você DEVE OBRIGATORIAMENTE adicionar a condição " Vendedor LIKE '%{nome_usuario}%' " na cláusula WHERE em todas as suas consultas.
 
-                        DIRETRIZES DE QUERY:
-                        1. Se pedir "maiores clientes", agrupe por Nome_Clien, some i_Vtotal, ordene desc e use LIMIT.
-                        2. Se pedir "maior pedido em aberto", filtre por Status = 'Aberto', ordene por i_Vtotal DESC LIMIT 1.
-                        3. Se pedir "itens que mais vendo", agrupe por i_NomeProd, some i_Qtdade, e faça AVG(i_Preco).
-                        4. Sempre use LIKE '%NOME%' para buscar textos (clientes ou produtos).
+                        DIRETRIZES DE QUERY COM FOCO NA SUA LÓGICA:
+                        1. Quando o usuário pedir os **últimos preços de cada item para um cliente específico**, você DEVE buscar o produto, o preço da última data e a última data de faturamento de cada item.
+                        2. Para estruturar isso sem quebrar a regra do GROUP BY do MySQL, use uma subconsulta ou ordene por data decrescente agrupando por item. 
+                        Exemplo estrutural ideal:
+                        SELECT i_NomeProd AS Produto, MAX(i_Preco) AS Ultimo_Preco, MAX(Dt_Fatura) AS Ultima_Data 
+                        FROM PEDIDODEVENDA 
+                        WHERE Status = 'Fat_OK' AND Nome_Clien LIKE '%NOME_DO_CLIENTE%' 
+                        GROUP BY i_NomeProd ORDER BY Ultima_Data DESC;
+                        3. Sempre use LIKE '%NOME%' para buscar o nome do cliente.
                         
                         Pergunta do usuário: "{prompt_ia}"
                         """
-                        
+                    
                         model = genai.GenerativeModel('gemini-3-flash-preview')
                         resposta_gemini = model.generate_content(prompt_sistema)
                         
