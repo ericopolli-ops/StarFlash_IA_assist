@@ -88,7 +88,7 @@ aba1, aba2, aba3, aba4 = st.tabs([
     "📊 Visão Geral da Carteira", 
     "🔎 Raio-X do Cliente", 
     "🏆 Performance do Vendedor",
-    "🧠 Chatbot IA (Analítico)"
+    "🧠 Chatbot IA (Analítico Avançado)"
 ])
 
 # ==========================================
@@ -531,12 +531,12 @@ with aba3:
                 st.error(f"❌ Erro ao analisar o Cockpit: {e}")
 
 # ==========================================
-# ABA 4: CHATBOT IA COM CÉREBRO GEMINI TEXT-TO-SQL
+# ABA 4: CHATBOT IA COM SUPER DICIONÁRIO DE DADOS
 # ==========================================
 with aba4:
-    st.markdown("### 🧠 Assistente Analítico (Cérebro Text-to-SQL)")
-    st.markdown("A IA agora escreve as consultas de banco de dados do zero. Peça médias, rankings, maiores e menores.")
-    st.markdown("💡 *Exemplos:* `Quais os 3 maiores clientes em faturamento?`, `Qual o maior pedido em aberto?`, `Me traga os itens mais vendidos e o preço médio.`")
+    st.markdown("### 🧠 Assistente Analítico Avançado (Dicionário ERP Mapeado)")
+    st.markdown("A IA agora possui o catálogo completo de todas as colunas, custos, impostos, margens, filiais e dimensões temporais do seu ERP.")
+    st.markdown("💡 *Exemplos:* `Qual o cliente que mais comprou o item HAND SOLV em 2026?`, `Quais clientes compram o produto 2510 na filial 0001?`, `Cliente PALINI E ALVES, traga os últimos preços.`")
 
     # Tenta configurar o Gemini na hora, caso não tenha sido configurado no topo
     try:
@@ -551,7 +551,7 @@ with aba4:
     
     if "mensagens_chat_ia" not in st.session_state:
         st.session_state.mensagens_chat_ia = [
-            {"role": "assistant", "content": "Fala chefe! O motor de Text-to-SQL está ligado com o Gemini 3. Agora eu entendo rankings, médias e valores unitários. Manda a bronca!", "df": None, "sql": None}
+            {"role": "assistant", "content": "Fala chefe! O dicionário completo da view PEDIDODEVENDA foi injetado no meu cérebro. Agora entendo filiais, códigos exatos, custos, impostos e anos nativos (`ANO`). Manda a braba!", "df": None, "sql": None}
         ]
 
     for msg in st.session_state.mensagens_chat_ia:
@@ -563,49 +563,78 @@ with aba4:
                 with st.expander("Ver o código SQL gerado pela IA"):
                     st.code(msg["sql"], language="sql")
 
-    if prompt_ia := st.chat_input("Ex: traga a lista dos 3 maiores clientes...", key="chat_input_ia"):
+    if prompt_ia := st.chat_input("Ex: qual o maior cliente do produto HAND SOLV em 2026...", key="chat_input_ia"):
         st.session_state.mensagens_chat_ia.append({"role": "user", "content": prompt_ia})
         with st.chat_message("user"):
             st.markdown(prompt_ia)
 
         if ia_configurada:
             with st.chat_message("assistant"):
-                with st.spinner("🧠 O Gemini está desenhando a query SQL para sua pergunta..."):
+                with st.spinner("🧠 O Gemini está consultando o dicionário do ERP e gerando o SQL..."):
                     try:
                         perfil_usuario = st.session_state.perfil
                         nome_usuario = st.session_state.vendedor_nome
                         
                         prompt_sistema = f"""
-                        Você é um Analista de Dados Sênior especialista em MySQL para ERPs.
-                        Sua missão é transformar a pergunta do usuário em uma única query SQL.
+                        Você é um Analista de Dados Sênior e DBA especialista no ERP Star Flash.
+                        Sua missão é transformar a pergunta do usuário em uma única query SQL otimizada para o MySQL.
                         NÃO retorne NENHUM texto além da query SQL. Sem formatação markdown, sem crases, sem explicações.
 
-                        Tabela principal: PEDIDODEVENDA
-                        Colunas úteis:
-                        - Nome_Clien (VARCHAR): Nome do Cliente
-                        - i_NomeProd (VARCHAR): Nome ou descrição do Produto
-                        - i_Preco (FLOAT): Preço Unitário do item
-                        - Dt_Fatura (VARCHAR): Data de Faturamento (formato YYYYMMDD)
-                        - Status (VARCHAR): Status do pedido ('Fat_OK' para faturados)
-                        - Vendedor (VARCHAR): Nome do vendedor
+                        TABELA ÚNICA: PEDIDODEVENDA
+                        
+                        DICIONÁRIO COMPLETO DE COLUNAS DISPONÍVEIS:
+                        1. Identificação Comercial e Pedidos:
+                           - PedVenda (VARCHAR): Número do Pedido
+                           - Status (VARCHAR): Situação ('Fat_OK' = Faturado, 'Aberto' = Pendente, 'Cancelado')
+                           - Filial (VARCHAR): Código da filial com 4 dígitos (ex: '0001', '0002')
+                           - Vendedor (VARCHAR): Nome do vendedor
+                           - Represent (VARCHAR): Nome do representante
+                        
+                        2. Datas e Dimensões Temporais Nativas (USE ESTAS PARA ANOS E MESES!):
+                           - Data_Ped (VARCHAR): Data do Pedido (formato YYYYMMDD)
+                           - Dt_Fatura (VARCHAR): Data de Faturamento (formato YYYYMMDD)
+                           - ANO (VARCHAR): Ano extraído nativamente (ex: '2026')[cite: 1]
+                           - ANOMES (VARCHAR): Ano e Mês (ex: '202607')[cite: 1]
+                           - BIMESTRE, SEMESTRE (VARCHAR)[cite: 1]
+
+                        3. Clientes e Localização:
+                           - CodCliente (VARCHAR): Código do cliente
+                           - Nome_Clien (VARCHAR): Razão Social do Cliente
+                           - Cidade, UF, Bairro (VARCHAR)
+                           - Regiao, Ramo Ativ (VARCHAR)
+
+                        4. Produtos e Catálogo:
+                           - i_codProd (VARCHAR): Código exato do produto (ex: '2510')
+                           - i_NomeProd (VARCHAR): Descrição/Nome do produto
+                           - Unid (VARCHAR): Unidade de medida (ex: 'UN', 'KG', 'CX')
+                           - Grupo, Modelo, Marca, Fabric, NCM (VARCHAR)[cite: 1]
+
+                        5. Valores, Preços e Custos:
+                           - i_Preco (FLOAT): Preço unitário líquido do item
+                           - Custo (FLOAT): Custo unitário do item[cite: 1]
+                           - i_Qtdade (FLOAT): Quantidade vendida
+                           - i_Vtotal (FLOAT): Valor total do item na linha
+                           - Custot (FLOAT): Custo total da linha[cite: 1]
+
+                        6. Logística e Fretes:
+                           - Transporta (VARCHAR): Nome da Transportadora
+                           - FRETE, vFrete (VARCHAR/FLOAT): Dados de frete[cite: 1]
+                           - Dt_Entrega (VARCHAR): Data de entrega
 
                         REGRA DE SEGURANÇA OBRIGATÓRIA:
                         O usuário logado tem o perfil: {perfil_usuario} e nome: {nome_usuario}.
                         Se o perfil for 'VENDEDOR', você DEVE OBRIGATORIAMENTE adicionar a condição " Vendedor LIKE '%{nome_usuario}%' " na cláusula WHERE em todas as suas consultas.
 
-                        DIRETRIZES DE QUERY COM FOCO NA SUA LÓGICA:
-                        1. Quando o usuário pedir os **últimos preços de cada item para um cliente específico**, você DEVE buscar o produto, o preço da última data e a última data de faturamento de cada item.
-                        2. Para estruturar isso sem quebrar a regra do GROUP BY do MySQL, use uma subconsulta ou ordene por data decrescente agrupando por item. 
-                        Exemplo estrutural ideal:
-                        SELECT i_NomeProd AS Produto, MAX(i_Preco) AS Ultimo_Preco, MAX(Dt_Fatura) AS Ultima_Data 
-                        FROM PEDIDODEVENDA 
-                        WHERE Status = 'Fat_OK' AND Nome_Clien LIKE '%NOME_DO_CLIENTE%' 
-                        GROUP BY i_NomeProd ORDER BY Ultima_Data DESC;
-                        3. Sempre use LIKE '%NOME%' para buscar o nome do cliente.
+                        DIRETRIZES INTELIGENTES DE BUSCA (EVITANDO FALHAS):
+                        1. **Filtros de Ano:** Sempre use a coluna nativa `ANO = '2026'` em vez de manipular datas por string, a menos que precise de um intervalo específico.
+                        2. **Filtros de Filial:** Trate sempre como string exata, ex: `Filial = '0001'`.
+                        3. **Filtros de Produtos por Nome:** Como nomes de produtos podem ser longos, extraia apenas as palavras-chave principais usando coringa, ex: `i_NomeProd LIKE '%HAND SOLV%'`. Se o usuário citar um código numérico (ex: 2510), priorize a busca exata por `i_codProd LIKE '%2510%'`.
+                        4. **Perguntas sobre "Últimos Preços de cada item para um cliente":** Retorne o produto (`i_NomeProd`), o preço (`i_Preco`) e a data (`Dt_Fatura`), utilizando subconsultas com `MAX(Dt_Fatura)` agrupado por `i_NomeProd` para garantir que venha exatamente a última venda real sem quebrar a regra do `GROUP BY` do MySQL.
+                        5. **Perguntas de Totais e Médias:** Utilize `SUM(i_Vtotal)` para faturamento, `AVG(i_Preco)` para preço médio e `MAX(i_Vtotal)` para maiores pedidos. Sempre filtre `Status = 'Fat_OK'` para dados de faturamento real.
                         
                         Pergunta do usuário: "{prompt_ia}"
                         """
-                    
+                        
                         model = genai.GenerativeModel('gemini-3-flash-preview')
                         resposta_gemini = model.generate_content(prompt_sistema)
                         
@@ -634,10 +663,10 @@ with aba4:
                         else:
                             # Formatação cosmética de colunas de moeda se a IA usar alias
                             for col in df_res_ia.columns:
-                                if 'total' in col.lower() or 'preco' in col.lower() or 'preço' in col.lower() or 'valor' in col.lower() or 'média' in col.lower():
+                                if any(k in col.lower() for k in ['total', 'preco', 'preço', 'valor', 'média', 'custo']):
                                     df_res_ia[col] = df_res_ia[col].apply(lambda x: f"R$ {x:,.2f}" if isinstance(x, (int, float)) else x)
                             
-                            resposta_ia = f"🤖 **Pronto!** Analisei a base e cheguei neste resultado:"
+                            resposta_ia = f"🤖 **Pronto!** Analisei o ERP e cheguei neste resultado:"
                             st.markdown(resposta_ia)
                             st.dataframe(df_res_ia, use_container_width=True, hide_index=True)
                             
